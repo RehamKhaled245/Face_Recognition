@@ -1,15 +1,24 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import numpy as np
 import dlib
 import io
 from PIL import Image
+import os
 
 app = FastAPI(title="Face Embedding API")
 
+# ---- CORS ----
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ---- Load Models (مرة واحدة عند بدء السيرفر) ----
-import os
 BASE = os.path.dirname(__file__)
 
 sp_68 = dlib.shape_predictor(os.path.join(BASE, "models/shape_predictor_68_face_landmarks.dat"))
@@ -18,7 +27,6 @@ face_rec_model = dlib.face_recognition_model_v1(os.path.join(BASE, "models/dlib_
 modelFile = os.path.join(BASE, "models/Widerface-RetinaFace.caffemodel")
 configFile = os.path.join(BASE, "models/deploy.prototxt")
 net = cv2.dnn.readNetFromCaffe(configFile, modelFile)
-
 
 def detect_faces(frame):
     (h, w) = frame.shape[:2]
@@ -38,17 +46,14 @@ def detect_faces(frame):
             rects.append(dlib.rectangle(x1, y1, x2, y2))
     return rects
 
-
 def get_embedding(img_rgb, rect):
     shape = sp_68(img_rgb, rect)
     emb = face_rec_model.compute_face_descriptor(img_rgb, shape)
     return np.array(emb).tolist()
 
-
 # ---- Endpoint الرئيسي ----
 @app.post("/embed")
 async def embed_face(file: UploadFile = File(...)):
-    # قراءة الصورة
     contents = await file.read()
     np_arr = np.frombuffer(contents, np.uint8)
     img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -58,12 +63,10 @@ async def embed_face(file: UploadFile = File(...)):
 
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-    # كشف الوجوه
     faces = detect_faces(img_bgr)
     if len(faces) == 0:
         raise HTTPException(status_code=404, detail="No face detected in image")
 
-    # استخراج embeddings لكل الوجوه في الصورة
     embeddings = []
     for rect in faces:
         emb = get_embedding(img_rgb, rect)
@@ -80,7 +83,6 @@ async def embed_face(file: UploadFile = File(...)):
         "faces_found": len(embeddings),
         "results": embeddings
     })
-
 
 @app.get("/health")
 def health():
