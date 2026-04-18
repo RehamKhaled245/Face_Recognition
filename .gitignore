@@ -1,0 +1,9 @@
+models/
+*.pkl
+*.h5
+*.pt
+*.onnx
+*.dat
+*.caffemodel
+__pycache__/
+.env
